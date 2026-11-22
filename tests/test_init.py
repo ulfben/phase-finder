@@ -41,7 +41,7 @@ async def _record_history(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -
 
 
 async def test_finds_the_phase(
-    recorder_mock, hass: HomeAssistant, freezer: FrozenDateTimeFactory
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
 ) -> None:
     other = MockConfigEntry(domain="test")
     other.add_to_hass(hass)
