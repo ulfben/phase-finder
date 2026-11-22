@@ -22,6 +22,7 @@ from homeassistant.helpers.storage import Store
 from . import analysis as an
 from .const import (
     CHUNK_S,
+    CONF_EXCLUDE,
     CONF_HALF_LIFE_DAYS,
     CONF_INTERVAL_DAYS,
     CONF_INVERT,
@@ -210,6 +211,24 @@ class PhaseFinder:
 
     def active_keys(self) -> set[str]:
         return set(self.load_keys().values())
+
+    def mark_known(self, keys: set[str]) -> None:
+        """These loads have entities already; don't announce them as new."""
+        self._known_keys |= keys
+
+    def sensor_keys(self) -> set[str]:
+        """Loads that get a phase sensor: the active ones, plus known loads whose source still
+        exists and is not excluded (an integration that is slow to start must not lose its
+        loads' sensors)."""
+        ent_reg = er.async_get(self.hass)
+        exclude = set(self.options.get(CONF_EXCLUDE) or ())
+        keys = self.active_keys()
+        for key, load in self.loads.items():
+            if key in keys or load.entity_id in exclude:
+                continue
+            if key.startswith("entity:") or ent_reg.async_get(key) is not None:
+                keys.add(key)
+        return keys
 
     async def async_start(self) -> None:
         self._unsubs.append(

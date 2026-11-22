@@ -38,9 +38,10 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     finder = entry.runtime_data
-    active = finder.active_keys()
-    loads = [finder.loads[k] for k in sorted(active) if k in finder.loads]
-    _remove_stale(hass, entry.entry_id, active)
+    keys = finder.sensor_keys()
+    loads = [finder.loads[k] for k in sorted(keys)]
+    _remove_stale(hass, entry.entry_id, keys)
+    finder.mark_known(keys)
     async_add_entities([LastRunSensor(finder), *(_phase_sensors(hass, finder, loads))])
 
     @callback
@@ -50,10 +51,10 @@ async def async_setup_entry(
     entry.async_on_unload(finder.async_add_new_load_listener(_new))
 
 
-def _remove_stale(hass: HomeAssistant, entry_id: str, active: set[str]) -> None:
-    """Remove phase sensors of loads that are no longer analysed, and stale device links."""
+def _remove_stale(hass: HomeAssistant, entry_id: str, keys: set[str]) -> None:
+    """Remove phase sensors of excluded or deleted loads, and stale device links."""
     ent_reg = er.async_get(hass)
-    wanted = {f"{entry_id}_{key}" for key in active} | {f"{entry_id}_last_run"}
+    wanted = {f"{entry_id}_{key}" for key in keys} | {f"{entry_id}_last_run"}
     for reg in er.async_entries_for_config_entry(ent_reg, entry_id):
         if reg.domain == "sensor" and reg.unique_id not in wanted:
             ent_reg.async_remove(reg.entity_id)
@@ -72,7 +73,7 @@ def _phase_sensors(
     # How many analysed loads each device has: one gets the name "Phase", several get
     # "<sensor name> phase" so they can be told apart.
     per_device: dict[str, int] = {}
-    for key in finder.active_keys():
+    for key in finder.sensor_keys():
         load = finder.loads.get(key)
         entry = ent_reg.async_get(load.entity_id) if load else None
         if entry and entry.device_id:

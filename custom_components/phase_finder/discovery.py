@@ -99,14 +99,28 @@ def suggest_meters(
     return [m for _, _, m in sorted(meters, key=lambda m: (m[0], m[1]))]
 
 
+def _registry_power(entry: er.RegistryEntry) -> bool:
+    return (
+        entry.domain == "sensor"
+        and (entry.device_class or entry.original_device_class) == "power"
+        and entry.unit_of_measurement in POWER_UNITS
+    )
+
+
 def power_sensors(hass: HomeAssistant) -> list[str]:
-    """Every sensor that reports power in W, kW or MW right now."""
-    return sorted(
+    """Every sensor that reports power in W, kW or MW.
+
+    The entity registry is read as well as the states, so a sensor whose integration has not
+    reported yet (just after a restart) still counts.
+    """
+    found = {
         state.entity_id
         for state in hass.states.async_all("sensor")
         if state.attributes.get("device_class") == "power"
         and state.attributes.get("unit_of_measurement") in POWER_UNITS
-    )
+    }
+    found |= {e.entity_id for e in er.async_get(hass).entities.values() if _registry_power(e)}
+    return sorted(found)
 
 
 def meter_entities(meters: Iterable[Mapping[str, Any]]) -> set[str]:
@@ -143,14 +157,17 @@ def discover_loads(hass: HomeAssistant, meter_sensors: set[str]) -> list[str]:
         if (entry := ent_reg.async_get(e)) is not None and entry.device_id
     }
     for entity_id in power_sensors(hass):
-        state = hass.states.get(entity_id)
         entry = ent_reg.async_get(entity_id)
-        if state is None or entry is None or entry.device_id is None:
+        if entry is None or entry.device_id is None:
             continue
         per_device[entry.device_id] += 1
         if entry.disabled_by or entry.hidden_by or entry.platform in DERIVED_PLATFORMS:
             continue
-        if state.attributes.get("state_class") != "measurement":
+        state = hass.states.get(entity_id)
+        state_class = (entry.capabilities or {}).get("state_class") or (
+            state.attributes.get("state_class") if state else None
+        )
+        if state_class != "measurement":
             continue
         tokens = set(entity_id.partition(".")[2].split("_"))
         if "total" in tokens or _NOT_POWER & tokens or _EXPORT_WORDS & tokens:
