@@ -40,9 +40,7 @@ async def _record_history(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -
     freezer.tick(timedelta(minutes=10))
 
 
-async def test_finds_the_phase(
-    hass: HomeAssistant, freezer: FrozenDateTimeFactory
-) -> None:
+async def test_finds_the_phase(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
     other = MockConfigEntry(domain="test")
     other.add_to_hass(hass)
     device = dr.async_get(hass).async_get_or_create(
