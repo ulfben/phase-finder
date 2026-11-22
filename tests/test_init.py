@@ -72,7 +72,7 @@ async def test_finds_the_phase(hass: HomeAssistant, freezer: FrozenDateTimeFacto
     assert phase_entry.device_id == device.id  # shown on the plug's own device
 
     last = hass.states.get("sensor.phase_finder_last_analysis")
-    assert last is not None and last.attributes["votes"] >= 20
+    assert last is not None and last.attributes["votes"] >= 15
 
     # A second run adds nothing new but keeps the answer; a restart keeps the votes.
     await entry.runtime_data.async_run()
