@@ -59,6 +59,7 @@ DERIVED_PLATFORMS: Final = frozenset(
         "forecast_solar",
         "group",
         "integration",
+        "mobile_app",  # a phone's battery, not a mains load
         "min_max",
         "powercalc",
         "solcast_solar",

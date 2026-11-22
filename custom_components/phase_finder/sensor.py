@@ -9,8 +9,8 @@ from typing import Any
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device import async_device_info_to_link_from_entity
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -40,6 +40,7 @@ async def async_setup_entry(
     finder = entry.runtime_data
     active = finder.active_keys()
     loads = [finder.loads[k] for k in sorted(active) if k in finder.loads]
+    _remove_stale(hass, entry.entry_id, active)
     async_add_entities([LastRunSensor(finder), *(_phase_sensors(hass, finder, loads))])
 
     @callback
@@ -47,6 +48,21 @@ async def async_setup_entry(
         async_add_entities(_phase_sensors(hass, finder, loads))
 
     entry.async_on_unload(finder.async_add_new_load_listener(_new))
+
+
+def _remove_stale(hass: HomeAssistant, entry_id: str, active: set[str]) -> None:
+    """Remove phase sensors of loads that are no longer analysed, and stale device links."""
+    ent_reg = er.async_get(hass)
+    wanted = {f"{entry_id}_{key}" for key in active} | {f"{entry_id}_last_run"}
+    for reg in er.async_entries_for_config_entry(ent_reg, entry_id):
+        if reg.domain == "sensor" and reg.unique_id not in wanted:
+            ent_reg.async_remove(reg.entity_id)
+    # Older versions linked the phase sensors through DeviceInfo, which added this entry
+    # to the loads' devices. Only the service device should belong to it.
+    dev_reg = dr.async_get(hass)
+    for device in dr.async_entries_for_config_entry(dev_reg, entry_id):
+        if (DOMAIN, entry_id) not in device.identifiers:
+            dev_reg.async_update_device(device.id, remove_config_entry_id=entry_id)
 
 
 def _phase_sensors(
@@ -85,18 +101,22 @@ class PhaseSensor(SensorEntity):
         self._attr_unique_id = f"{finder.entry.entry_id}_{load.key}"
         source = load.entity_id
         entry = er.async_get(hass).async_get(source)
-        link = async_device_info_to_link_from_entity(hass, source)
-        own_name = (entry.name or entry.original_name) if entry else None
-        if own_name is None:
-            state = hass.states.get(source)
-            own_name = state.name if state else source
-        if link is not None:
-            self._attr_device_info = link
-            shared = entry is not None and per_device.get(entry.device_id or "", 0) > 1
-            self._attr_name = f"{_POWER_SUFFIX.sub('', own_name)} phase" if shared else "Phase"
+        device = (
+            dr.async_get(hass).async_get(entry.device_id) if entry and entry.device_id else None
+        )
+        # The source's own name without "power": "Output 0 power" -> "Output 0".
+        own = _POWER_SUFFIX.sub("", (entry.name or entry.original_name or "") if entry else "")
+        if device is not None:
+            # Shown on the load's own device, like a helper. Setting device_entry links the
+            # entity without adding this integration to the other integration's device.
+            self.device_entry = device
+            shared = per_device.get(device.id, 0) > 1
+            self._attr_name = f"{own.strip()} phase" if shared and own.strip() else "Phase"
         else:
             self._attr_device_info = service_device(finder)
-            self._attr_name = f"{_POWER_SUFFIX.sub('', own_name)} phase"
+            state = hass.states.get(source)
+            base = own.strip() or _POWER_SUFFIX.sub("", state.name if state else source).strip()
+            self._attr_name = f"{base or source} phase"
         # sensor.dishwasher_power -> sensor.dishwasher_power_phase, so dashboards can find it.
         self.entity_id = f"sensor.{source.partition('.')[2]}_phase"
 
