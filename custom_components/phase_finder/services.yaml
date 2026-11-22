@@ -1,0 +1,6 @@
+rescan:
+  fields:
+    full:
+      default: false
+      selector:
+        boolean:

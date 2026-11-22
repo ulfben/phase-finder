@@ -1,0 +1,14 @@
+{
+  "domain": "phase_finder",
+  "name": "Phase Finder",
+  "codeowners": ["@ulfben"],
+  "config_flow": true,
+  "dependencies": ["recorder"],
+  "documentation": "https://github.com/ulfben/phase-finder",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/ulfben/phase-finder/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "2026.11.1"
+}

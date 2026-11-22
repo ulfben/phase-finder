@@ -165,9 +165,7 @@ def find_steps(series: Series, params: Params) -> list[Step]:
     return steps
 
 
-def _phase_reading(
-    terms: Sequence[Term], data: Mapping[str, Series], t: float
-) -> float | None:
+def _phase_reading(terms: Sequence[Term], data: Mapping[str, Series], t: float) -> float | None:
     total = 0.0
     for term in terms:
         series = data.get(term.source)
@@ -400,9 +398,7 @@ def verdict(votes: Mapping[str, float], params: VerdictParams | None = None) -> 
     return Verdict(top, _confidence(agree, total), agree / total, total)
 
 
-def publish(
-    current: str | None, new: Verdict, params: VerdictParams | None = None
-) -> str | None:
+def publish(current: str | None, new: Verdict, params: VerdictParams | None = None) -> str | None:
     """The phase to show, given what is shown now. Keeps weak results from flip-flopping."""
     p = params or VerdictParams()
     if new.phase is None:
@@ -414,8 +410,10 @@ def publish(
 
 def is_certain(v: Verdict, params: VerdictParams | None = None) -> bool:
     p = params or VerdictParams()
-    return v.phase is not None and v.confidence >= p.certain_confidence and (
-        v.total >= p.certain_votes
+    return (
+        v.phase is not None
+        and v.confidence >= p.certain_confidence
+        and (v.total >= p.certain_votes)
     )
 
 

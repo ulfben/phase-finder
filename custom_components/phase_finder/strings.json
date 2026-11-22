@@ -1,0 +1,178 @@
+{
+  "config": {
+    "abort": {
+      "single_instance_allowed": "Phase Finder is already set up."
+    },
+    "error": {
+      "same_sensor_twice": "Each sensor can be used only once in a meter.",
+      "meter_already_added": "This meter has already been added."
+    },
+    "step": {
+      "reference": {
+        "title": "Reference meter",
+        "description": "Pick the meter that measures power per phase on your main fuse, such as a P1/DSMR reader. Its L1, L2 and L3 are the labels Phase Finder reports. Choose a meter that follows the grid company's phase order.",
+        "data": {
+          "reference": "Meter"
+        }
+      },
+      "reference_manual": {
+        "title": "Reference meter",
+        "description": "Pick the power sensor for each phase. If the meter reports import and export as separate sensors, also pick the export sensors: they are subtracted.",
+        "data": {
+          "name": "Name",
+          "l1": "L1 power",
+          "l2": "L2 power",
+          "l3": "L3 power",
+          "l1_export": "L1 export power",
+          "l2_export": "L2 export power",
+          "l3_export": "L3 export power",
+          "invert": "The meter reports import as negative"
+        }
+      },
+      "extra": {
+        "title": "More meters (optional)",
+        "description": "A second meter on the main fuse, such as an inverter's grid meter, can report more often than the reference ({reference}) and so find more phases. Phase Finder learns how its phase labels match the reference's before using it, so its A/B/C order does not matter. Do not pick sub-meters that measure only part of the house.",
+        "data": {
+          "extra": "Meters",
+          "add_manual": "Add a meter by picking its sensors"
+        }
+      },
+      "extra_manual": {
+        "title": "Another meter",
+        "description": "Pick the power sensor for each phase. The phase order does not need to match the reference meter.",
+        "data": {
+          "name": "Name",
+          "l1": "Phase 1 power",
+          "l2": "Phase 2 power",
+          "l3": "Phase 3 power",
+          "l1_export": "Phase 1 export power",
+          "l2_export": "Phase 2 export power",
+          "l3_export": "Phase 3 export power",
+          "invert": "The meter reports import as negative",
+          "add_another": "Add another meter"
+        }
+      },
+      "loads": {
+        "title": "Loads",
+        "description": "Phase Finder found {count} power sensors that look like single loads (smart plugs, circuit meters):\n{loads}\n\nLoads that never switch (a network rack, a camera) have no steps to learn from, so their phase stays unknown.",
+        "data": {
+          "auto": "Analyse the power sensors found automatically, including new ones",
+          "include": "Also analyse",
+          "exclude": "Never analyse"
+        }
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "same_sensor_twice": "Each sensor can be used only once in a meter.",
+      "meter_already_added": "This meter has already been added."
+    },
+    "step": {
+      "init": {
+        "menu_options": {
+          "reference": "Meters",
+          "loads": "Loads",
+          "settings": "Settings"
+        }
+      },
+      "reference": {
+        "title": "Reference meter",
+        "description": "Pick the meter that measures power per phase on your main fuse, such as a P1/DSMR reader. Its L1, L2 and L3 are the labels Phase Finder reports.",
+        "data": {
+          "reference": "Meter"
+        }
+      },
+      "reference_manual": {
+        "title": "Reference meter",
+        "description": "Pick the power sensor for each phase. If the meter reports import and export as separate sensors, also pick the export sensors: they are subtracted.",
+        "data": {
+          "name": "Name",
+          "l1": "L1 power",
+          "l2": "L2 power",
+          "l3": "L3 power",
+          "l1_export": "L1 export power",
+          "l2_export": "L2 export power",
+          "l3_export": "L3 export power",
+          "invert": "The meter reports import as negative"
+        }
+      },
+      "extra": {
+        "title": "More meters (optional)",
+        "description": "A second meter on the main fuse, such as an inverter's grid meter, can report more often than the reference ({reference}) and so find more phases. Phase Finder learns how its phase labels match the reference's before using it.",
+        "data": {
+          "extra": "Meters",
+          "add_manual": "Add a meter by picking its sensors"
+        }
+      },
+      "extra_manual": {
+        "title": "Another meter",
+        "description": "Pick the power sensor for each phase. The phase order does not need to match the reference meter.",
+        "data": {
+          "name": "Name",
+          "l1": "Phase 1 power",
+          "l2": "Phase 2 power",
+          "l3": "Phase 3 power",
+          "l1_export": "Phase 1 export power",
+          "l2_export": "Phase 2 export power",
+          "l3_export": "Phase 3 export power",
+          "invert": "The meter reports import as negative",
+          "add_another": "Add another meter"
+        }
+      },
+      "loads": {
+        "title": "Loads",
+        "description": "Found automatically: {count} power sensors.\n{loads}",
+        "data": {
+          "auto": "Analyse the power sensors found automatically, including new ones",
+          "include": "Also analyse",
+          "exclude": "Never analyse"
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "data": {
+          "interval_days": "Analyse every",
+          "half_life_days": "Half-life of old votes",
+          "min_step_w": "Smallest power step to learn from",
+          "window_s": "Time window around a step"
+        },
+        "data_description": {
+          "half_life_days": "Old votes fade, so a load that moves to another socket is found again.",
+          "window_s": "How long before and after a step the phases are compared. Shorter needs meters that report often."
+        }
+      }
+    }
+  },
+  "selector": {
+    "reference": {
+      "options": {
+        "manual": "Pick the sensors myself"
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "analyse": {
+        "name": "Analyse now"
+      }
+    },
+    "sensor": {
+      "last_run": {
+        "name": "Last analysis"
+      }
+    }
+  },
+  "services": {
+    "rescan": {
+      "name": "Rescan",
+      "description": "Analyse the power history recorded since the last run.",
+      "fields": {
+        "full": {
+          "name": "Start over",
+          "description": "Forget all votes and learned meter mappings, then analyse all the history the recorder keeps."
+        }
+      }
+    }
+  }
+}
