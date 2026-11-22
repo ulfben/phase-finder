@@ -90,17 +90,23 @@ REF, FAST = p1(True), inv(1.0)  # the inverter meter with its own A/B/C labels, 
 sources = set(LOADS) | REF.sources() | FAST.sources()
 data = {e: load_series(e) for e in sources}
 print(f"loaded {sum(len(s) for s in data.values())} samples in {time.time() - t0:.1f}s")
-cross = {}
+mapping = {"L1": "L3", "L2": "L1", "L3": "L2"}
+day = 86400.0
+first = min(min(data[l].ts) for l in LOADS if len(data.get(l, ())))
 for load in LOADS:
-    r = analyse_load(load, [REF, FAST], data, Params())
-    for k, v in r.cross.get(FAST.name, {}).items():
-        cross[k] = cross.get(k, 0) + v
-print("cross tally:", dict(sorted(cross.items())))
-mapping = learn_mapping(cross)
-print("learned mapping:", mapping)
-for load in LOADS:
-    r = analyse_load(load, [REF, FAST], data, Params(), mappings={FAST.name: mapping},
-                     order=[FAST.name, REF.name])
-    v = verdict(r.votes)
-    print(f"{load.replace('sensor.', '')[:44]:44} t={r.tested:4} used={r.meters_used} "
+    buckets = []
+    a = first // day * day
+    while a < time.time():
+        r = analyse_load(load, [REF, FAST], data, Params(), a, a + day,
+                         mappings={FAST.name: mapping}, order=[FAST.name, REF.name])
+        buckets.append(r.votes)
+        a += day
+    buckets = [b for b in buckets if b]
+    i = detect_move(buckets)
+    kept = buckets[i:] if i is not None else buckets
+    total = {}
+    for b in kept:
+        total = merge_votes(total, b)
+    v = verdict(total)
+    print(f"{load.replace('sensor.', '')[:44]:44} days={len(buckets):2} move_at={i} "
           f"-> {v.phase} conf={v.confidence:.2f}")

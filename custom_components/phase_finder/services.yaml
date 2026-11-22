@@ -4,3 +4,12 @@ rescan:
       default: false
       selector:
         boolean:
+forget:
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          integration: phase_finder
+          domain: sensor
+          multiple: true

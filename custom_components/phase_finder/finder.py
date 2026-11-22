@@ -64,10 +64,36 @@ class LoadState:
     steps: float = 0.0
     tested: float = 0.0
     last_vote_ts: float | None = None
+    # Raw vote counts per analysed period (a day), oldest first: [start_ts, votes].
+    history: list[list[Any]] = field(default_factory=list)
 
     @property
     def verdict(self) -> an.Verdict:
         return an.verdict(self.votes)
+
+    def forget(self) -> None:
+        self.votes, self.history, self.published = {}, [], None
+        self.steps, self.tested, self.last_vote_ts = 0.0, 0.0, None
+
+    def update(
+        self, buckets: list[tuple[float, dict[str, int]]], now: float, half_life: float
+    ) -> bool:
+        """Add new per-period votes, drop the ones before a move, and recompute the faded
+        total. Returns True if the load moved."""
+        self.history.extend([ts, dict(v)] for ts, v in buckets if v)
+        self.history.sort(key=lambda b: b[0])
+        if half_life > 0:  # after eight half-lives a vote counts less than 0.4 %
+            self.history = [b for b in self.history if now - b[0] < 8 * half_life]
+        moved_at = an.detect_move([b[1] for b in self.history])
+        if moved_at is not None:
+            self.history = self.history[moved_at:]
+        votes: dict[str, float] = {}
+        for ts, bucket in self.history:
+            factor = 0.5 ** (max(now - ts, 0.0) / half_life) if half_life > 0 else 1.0
+            for key, n in bucket.items():
+                votes[key] = votes.get(key, 0.0) + n * factor
+        self.votes = {k: v for k, v in votes.items() if v >= 0.01}
+        return moved_at is not None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -77,6 +103,7 @@ class LoadState:
             "steps": self.steps,
             "tested": self.tested,
             "last_vote_ts": self.last_vote_ts,
+            "history": self.history,
         }
 
     @classmethod
@@ -89,6 +116,7 @@ class LoadState:
             steps=float(data.get("steps") or 0),
             tested=float(data.get("tested") or 0),
             last_vote_ts=data.get("last_vote_ts"),
+            history=[list(b) for b in data.get("history") or []],
         )
 
 
@@ -98,8 +126,10 @@ class _Totals:
     tested: int = 0
     votes: dict[str, int] = field(default_factory=dict)
     last_vote_ts: float | None = None
+    buckets: list[tuple[float, dict[str, int]]] = field(default_factory=list)
 
-    def add(self, result: an.LoadResult) -> None:
+    def add(self, start: float, result: an.LoadResult) -> None:
+        self.buckets.append((start, dict(result.votes)))
         self.steps += result.steps
         self.tested += result.tested
         for key, count in result.votes.items():
@@ -296,7 +326,8 @@ class PhaseFinder:
             return
         if full:
             for load in self.loads.values():
-                load.votes, load.steps, load.tested, load.last_vote_ts = {}, 0.0, 0.0, None
+                load.votes, load.history = {}, []
+                load.steps, load.tested, load.last_vote_ts = 0.0, 0.0, None
             self.cross, self.mappings, self.analysed_until = {}, {}, None
         params = self.params()
         recorder = get_instance(self.hass)
@@ -319,23 +350,25 @@ class PhaseFinder:
             totals, _, samples = await self._async_analyse(meters, active, params, start, end)
 
         half_life = float(self.options.get(CONF_HALF_LIFE_DAYS, DEFAULT_HALF_LIFE_DAYS)) * DAY_S
-        elapsed = end - self.analysed_until if self.analysed_until else 0.0
-        changes: list[tuple[LoadState, str | None, str | None]] = []
+        changes: list[tuple[LoadState, str | None, str | None, bool]] = []
         run_votes = 0
         for key, load in active.items():
-            load.votes = an.decay(load.votes, elapsed, half_life)
-            total = totals.get(key)
-            if total is not None:
-                load.votes = an.merge_votes(load.votes, total.votes)
-                load.steps += total.steps
-                load.tested += total.tested
-                if total.last_vote_ts is not None:
-                    load.last_vote_ts = total.last_vote_ts
-                run_votes += sum(total.votes.values())
+            if load.votes and not load.history:
+                # Saved by a version without per-day history: keep it as one period.
+                load.history = [[self.analysed_until or start, dict(load.votes)]]
+            total = totals.get(key) or _Totals()
+            moved = load.update(total.buckets, end, half_life)
+            load.steps += total.steps
+            load.tested += total.tested
+            if total.last_vote_ts is not None:
+                load.last_vote_ts = total.last_vote_ts
+            run_votes += sum(total.votes.values())
             before = load.published
-            load.published = an.publish(before, load.verdict)
-            if load.published != before:
-                changes.append((load, before, load.published))
+            new = load.verdict
+            # After a move the old answer is known to be wrong: show the new one right away.
+            load.published = new.phase if moved and new.phase else an.publish(before, new)
+            if load.published != before or moved:
+                changes.append((load, before, load.published, moved))
         self.analysed_until = end
         self.last_run = {
             "started_ts": started,
@@ -358,10 +391,17 @@ class PhaseFinder:
             },
         }
         await self._async_save()
-        for load, old, new_phase in changes:
+        for load, old, new_phase, moved in changes:
+            if moved:
+                _LOGGER.info("%s seems to have moved: %s -> %s", load.entity_id, old, new_phase)
             self.hass.bus.async_fire(
                 EVENT_PHASE_CHANGED,
-                {"entity_id": load.entity_id, "old_phase": old, "new_phase": new_phase},
+                {
+                    "entity_id": load.entity_id,
+                    "old_phase": old,
+                    "new_phase": new_phase,
+                    "moved": moved,
+                },
             )
         _LOGGER.info(
             "Analysed %.1f days of history for %d loads: %d votes in %.1f s",
@@ -392,7 +432,7 @@ class PhaseFinder:
                 _analyse_chunk, self.hass, meters, list(by_entity), params, a, b, mappings
             )
             for entity_id, result in results.items():
-                totals.setdefault(by_entity[entity_id], _Totals()).add(result)
+                totals.setdefault(by_entity[entity_id], _Totals()).add(a, result)
                 for meter, tally in result.cross.items():
                     into = cross.setdefault(meter, {})
                     for pair, n in tally.items():
@@ -423,6 +463,27 @@ class PhaseFinder:
                         ", ".join(f"its {k} is {v}" for k, v in mapping.items()),
                     )
         return learned
+
+    async def async_forget(self, entity_ids: list[str]) -> list[str]:
+        """Forget what is known about loads, given their phase sensors or power sensors."""
+        ent_reg = er.async_get(self.hass)
+        prefix = f"{self.entry.entry_id}_"
+        forgotten: list[str] = []
+        for entity_id in entity_ids:
+            reg = ent_reg.async_get(entity_id)
+            key = None
+            if reg is not None and reg.platform == DOMAIN and reg.unique_id.startswith(prefix):
+                key = reg.unique_id.removeprefix(prefix)
+            else:
+                key = next((k for k, v in self.loads.items() if v.entity_id == entity_id), None)
+            load = self.loads.get(key) if key else None
+            if load is not None:
+                load.forget()
+                forgotten.append(load.entity_id)
+        if forgotten:
+            await self._async_save()
+            async_dispatcher_send(self.hass, f"{SIGNAL_UPDATED}_{self.entry.entry_id}")
+        return forgotten
 
     async def _async_save(self) -> None:
         await self._store.async_save(self.as_dict())

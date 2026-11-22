@@ -173,6 +173,16 @@
           "description": "Forget all votes and learned meter mappings, then analyse all the history the recorder keeps."
         }
       }
+    },
+    "forget": {
+      "name": "Forget",
+      "description": "Forget what Phase Finder has learned about loads, for example after moving them to another socket. They are learned again from the next analysis.",
+      "fields": {
+        "entity_id": {
+          "name": "Phase sensors",
+          "description": "The phase sensors of the loads to forget."
+        }
+      }
     }
   }
 }

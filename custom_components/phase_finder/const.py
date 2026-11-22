@@ -41,6 +41,7 @@ CHUNK_S: Final = 86400.0
 PRE_S: Final = 300.0
 
 SERVICE_RESCAN: Final = "rescan"
+SERVICE_FORGET: Final = "forget"
 ATTR_FULL: Final = "full"
 EVENT_PHASE_CHANGED: Final = f"{DOMAIN}_phase_changed"
 

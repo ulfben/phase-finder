@@ -82,3 +82,9 @@ async def test_finds_the_phase(hass: HomeAssistant, freezer: FrozenDateTimeFacto
 
     await hass.services.async_call(DOMAIN, "rescan", {"full": True}, blocking=True)
     assert hass.states.get("sensor.dishwasher_power_phase").state == "L2"
+
+    await hass.services.async_call(
+        DOMAIN, "forget", {"entity_id": "sensor.dishwasher_power_phase"}, blocking=True
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.dishwasher_power_phase").state == "unknown"

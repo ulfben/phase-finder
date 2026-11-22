@@ -135,9 +135,34 @@ def test_export_is_subtracted() -> None:
     assert an.analyse_load("plug", [meter], data, PARAMS).votes == {"L1": 1}
 
 
-def test_verdict_multi_phase_washer() -> None:
-    v = an.verdict({"L2": 136, "L3": 61, "L1": 10, "L1+L3": 22})
-    assert v.phase == "L2+L3"
+# The washing machine's votes per day, from a real house: moved from L2 to L3 in between.
+WASHER_DAYS = [
+    {"L1": 1, "L1+L3": 1, "L2": 24, "L2+L3": 1, "L3": 8},
+    {"L1": 7, "L1+L2": 1, "L1+L2+L3": 3, "L1+L3": 19, "L2": 104, "L2+L3": 7, "L3": 16},
+    {"L1": 2, "L1+L2": 5, "L1+L2+L3": 1, "L1+L3": 2, "L2": 7, "L2+L3": 6, "L3": 37},
+]
+
+
+def test_detects_a_moved_load() -> None:
+    assert an.detect_move(WASHER_DAYS) == 2
+    after = WASHER_DAYS[2]
+    assert an.verdict(after).phase == "L3"
+
+
+def test_no_move_for_a_steady_load() -> None:
+    days = [{"L3": 20, "L1": 2}, {"L3": 15, "L1+L3": 3}, {"L3": 30, "L2": 1}]
+    assert an.detect_move(days) is None
+    assert an.detect_move([{"L1": 4}, {"L2": 5}]) is None  # too few votes to call it a move
+
+
+def test_verdict_two_phase_loads() -> None:
+    assert an.verdict({"L1+L3": 30, "L3": 4}).phase == "L1+L3"  # a 400 V heater
+    assert an.verdict({"L2": 50, "L3": 40, "L1": 3}).phase == "L2+L3"  # heater and motor
+
+
+def test_verdict_pooled_move_leans_single() -> None:
+    # Before move detection splits them, pooled votes with a small second phase stay single.
+    assert an.verdict({"L2": 136, "L3": 55, "L1": 10, "L1+L3": 22}).phase == "L2"
 
 
 def test_verdict_ignores_a_few_stray_votes() -> None:

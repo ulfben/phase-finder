@@ -350,6 +350,7 @@ class VerdictParams:
     # and its motor on another) when it has this share of the votes and this many votes.
     involved_share: float = 0.3
     involved_votes: float = 10.0
+    multi_share: float = 0.5  # multi-phase steps that make up this share of the votes
     certain_confidence: float = 0.8  # below this the answer is shown as a guess
     certain_votes: float = 8.0
     switch_confidence: float = 0.75  # a published answer changes only for a clearer one
@@ -373,29 +374,80 @@ def _confidence(agree: float, total: float) -> float:
 
 
 def verdict(votes: Mapping[str, float], params: VerdictParams | None = None) -> Verdict:
-    """The best answer the votes support, without hysteresis."""
+    """The best answer the votes support, without hysteresis.
+
+    Multi-phase is the answer only when most votes are multi-phase steps (a 400 V heater
+    changes two phases at once), or when two phases each take a large part of the
+    single-phase votes. Single-phase votes split over two phases far more often mean the
+    load was moved, which detect_move handles before the votes get here.
+    """
     p = params or VerdictParams()
     total = float(sum(votes.values()))
     if total <= 0 or total < p.min_votes:
         return Verdict(None, 0.0, 0.0, total)
-    top = max(PHASES, key=lambda k: votes.get(k, 0.0))
-    # How much of the vote each phase takes part in.
-    weight = {ph: 0.0 for ph in PHASES}
-    for key, count in votes.items():
-        for ph in key_phases(key):
-            weight[ph] += count
+    top_key = max(votes, key=votes.__getitem__)
+    if len(key_phases(top_key)) > 1 and votes[top_key] / total >= p.multi_share:
+        agree = votes[top_key]
+        return Verdict(top_key, _confidence(agree, total), agree / total, total)
+    singles = {ph: votes.get(ph, 0.0) for ph in PHASES}
+    single_total = sum(singles.values())
+    if single_total <= 0:
+        return Verdict(None, 0.0, 0.0, total)
     involved = [
         ph
         for ph in PHASES
-        if weight[ph] / total >= p.involved_share and weight[ph] >= p.involved_votes
+        if singles[ph] / single_total >= p.involved_share and singles[ph] >= p.involved_votes
     ]
     if len(involved) >= 2:
         key = phase_key(involved)
         agree = sum(c for k, c in votes.items() if set(key_phases(k)) <= set(involved))
         return Verdict(key, _confidence(agree, total), agree / total, total)
-    # A single phase. With a low share it is only a guess, which the confidence shows.
-    agree = votes.get(top, 0.0)
-    return Verdict(top, _confidence(agree, total), agree / total, total)
+    # A single phase. Stray multi-phase votes (another load switching at the same moment)
+    # don't count against it; with a low share it is only a guess, which the confidence shows.
+    top = max(PHASES, key=singles.__getitem__)
+    agree = singles[top]
+    return Verdict(top, _confidence(agree, single_total), agree / single_total, total)
+
+
+def _single_share(votes: Mapping[str, float]) -> tuple[str | None, float, float]:
+    """(top single phase, its share of the single-phase votes, single-phase vote count)."""
+    singles = {ph: votes.get(ph, 0.0) for ph in PHASES}
+    total = sum(singles.values())
+    if total <= 0:
+        return None, 0.0, 0.0
+    top = max(PHASES, key=singles.__getitem__)
+    return top, singles[top] / total, total
+
+
+def detect_move(
+    buckets: Sequence[Mapping[str, float]],
+    min_votes: float = 10.0,
+    new_share: float = 0.75,
+    old_share: float = 0.6,
+) -> int | None:
+    """Where a load moved to another phase, as the index of the first bucket after the move.
+
+    buckets are vote counts per period (a day), oldest first. A move is a split where the
+    newer buckets agree on one phase, the older ones agreed on another, and both sides have
+    enough single-phase votes. The earliest such split wins, so the new side keeps as much
+    evidence as possible. None when there is no clear move.
+    """
+    for i in range(1, len(buckets)):
+        older: dict[str, float] = {}
+        for bucket in buckets[:i]:
+            older = merge_votes(older, bucket)
+        newer: dict[str, float] = {}
+        for bucket in buckets[i:]:
+            newer = merge_votes(newer, bucket)
+        new_top, new_frac, new_n = _single_share(newer)
+        old_top, old_frac, old_n = _single_share(older)
+        if new_top is None or old_top is None or new_top == old_top:
+            continue
+        if new_n < min_votes or old_n < min_votes:
+            continue
+        if new_frac >= new_share and old_frac >= old_share:
+            return i
+    return None
 
 
 def publish(current: str | None, new: Verdict, params: VerdictParams | None = None) -> str | None:

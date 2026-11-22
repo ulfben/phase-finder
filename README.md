@@ -18,8 +18,10 @@ reader, an inverter's grid meter, a Tibber Pulse, a clamp meter...).
 
 - **Each clear step is one vote.** Steps that coincide with another load switching on another
   phase are ambiguous and are skipped, so a few coincidences can't decide the answer.
-- **Multi-phase loads** are recognised: a 400 V heater across two phases, or a washing machine
-  with its heater on one phase and its motor on another, is reported as `L2+L3`.
+- **Multi-phase loads** are recognised: a 400 V heater across two phases is reported as `L1+L3`.
+- **Moved loads are noticed.** Votes are kept per day; when the recent days clearly agree on
+  another phase than the older ones, the older votes are dropped and the new phase is shown
+  right away (the event below has `moved: true`).
 - **Votes add up across runs** and fade slowly (60-day half-life by default), so the answer gets
   surer over time, even beyond the recorder's retention, and follows a plug you move.
 - **Answers don't flip-flop:** once shown, a phase changes only when a new answer is clearly
@@ -90,8 +92,10 @@ On the **Phase Finder** service device:
 
 - `phase_finder.rescan`: the same as the button. With `full: true` it forgets all votes and
   learned mappings and analyses all the recorded history again.
-- Event `phase_finder_phase_changed` (`entity_id`, `old_phase`, `new_phase`) when a load's shown
-  phase changes, for example to send a notification.
+- `phase_finder.forget`: forget what was learned about the given phase sensors' loads, for
+  example right after you move a plug. They are learned again from the next analysis.
+- Event `phase_finder_phase_changed` (`entity_id`, `old_phase`, `new_phase`, `moved`) when a
+  load's shown phase changes, for example to send a notification.
 
 ## Dashboard example
 
