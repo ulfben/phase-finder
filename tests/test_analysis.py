@@ -194,3 +194,12 @@ def test_merged_ramp_is_one_step() -> None:
 def test_unavailable_breaks_steps() -> None:
     series = an.Series([(0, 0.0), (10, None), (20, 500.0), (30, 0.0)])
     assert [s.delta for s in an.find_steps(series, PARAMS)] == [-500.0]
+
+
+def test_current_meter_matches_either_sign() -> None:
+    # A current has no sign: on a phase that exports, a load turning on lowers the current.
+    deltas = {"L1": 3.0, "L2": -480.0, "L3": 10.0}
+    assert an.classify(500.0, deltas, PARAMS, unsigned=True) == "L2"
+    assert an.classify(500.0, deltas, PARAMS) is None  # a signed meter would not accept it
+    # ...but it can't tell a split over two phases.
+    assert an.classify(1000.0, {"L1": 500.0, "L2": 0.0, "L3": 500.0}, PARAMS, True) is None

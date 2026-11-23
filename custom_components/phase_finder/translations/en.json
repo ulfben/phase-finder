@@ -10,14 +10,14 @@
     "step": {
       "reference": {
         "title": "Reference meter",
-        "description": "Pick the meter that measures power per phase on your main fuse, such as a P1/DSMR reader. Its L1, L2 and L3 are the labels Phase Finder reports. Choose a meter that follows the grid company's phase order.",
+        "description": "Pick the meter that measures each phase on your main fuse, such as a P1/DSMR reader. Its L1, L2 and L3 are the labels Phase Finder reports. Meters that report power per phase work best; meters that report only current per phase (such as a Tibber Pulse) work too, with fewer answers.",
         "data": {
           "reference": "Meter"
         }
       },
       "reference_manual": {
         "title": "Reference meter",
-        "description": "Pick the power sensor for each phase. If the meter reports import and export as separate sensors, also pick the export sensors: they are subtracted.",
+        "description": "Pick the power sensor (W) for each phase, or the current sensor (A) if the meter has no power per phase. If the meter reports import and export as separate sensors, also pick the export sensors: they are subtracted.",
         "data": {
           "name": "Name",
           "l1": "L1 power",
@@ -39,7 +39,7 @@
       },
       "extra_manual": {
         "title": "Another meter",
-        "description": "Pick the power sensor for each phase. The phase order does not need to match the reference meter.",
+        "description": "Pick the power sensor (W) for each phase, or the current sensor (A) if the meter has no power per phase. If the meter reports import and export as separate sensors, also pick the export sensors: they are subtracted.",
         "data": {
           "name": "Name",
           "l1": "Phase 1 power",
@@ -78,14 +78,14 @@
       },
       "reference": {
         "title": "Reference meter",
-        "description": "Pick the meter that measures power per phase on your main fuse, such as a P1/DSMR reader. Its L1, L2 and L3 are the labels Phase Finder reports.",
+        "description": "Pick the meter that measures each phase on your main fuse, such as a P1/DSMR reader. Its L1, L2 and L3 are the labels Phase Finder reports. Meters that report power per phase work best; meters that report only current per phase (such as a Tibber Pulse) work too, with fewer answers.",
         "data": {
           "reference": "Meter"
         }
       },
       "reference_manual": {
         "title": "Reference meter",
-        "description": "Pick the power sensor for each phase. If the meter reports import and export as separate sensors, also pick the export sensors: they are subtracted.",
+        "description": "Pick the power sensor (W) for each phase, or the current sensor (A) if the meter has no power per phase. If the meter reports import and export as separate sensors, also pick the export sensors: they are subtracted.",
         "data": {
           "name": "Name",
           "l1": "L1 power",
@@ -107,7 +107,7 @@
       },
       "extra_manual": {
         "title": "Another meter",
-        "description": "Pick the power sensor for each phase. The phase order does not need to match the reference meter.",
+        "description": "Pick the power sensor (W) for each phase, or the current sensor (A) if the meter has no power per phase. If the meter reports import and export as separate sensors, also pick the export sensors: they are subtracted.",
         "data": {
           "name": "Name",
           "l1": "Phase 1 power",
@@ -135,11 +135,13 @@
           "interval_days": "Analyse every",
           "half_life_days": "Half-life of old votes",
           "min_step_w": "Smallest power step to learn from",
-          "window_s": "Time window around a step"
+          "window_s": "Time window around a step",
+          "voltage": "Nominal phase voltage"
         },
         "data_description": {
           "half_life_days": "Old votes fade, so a load that moves to another socket is found again.",
-          "window_s": "How long before and after a step the phases are compared. Shorter needs meters that report often."
+          "window_s": "How long before and after a step the phases are compared. Shorter needs meters that report often.",
+          "voltage": "Used to turn a meter's current (A) into power."
         }
       }
     }

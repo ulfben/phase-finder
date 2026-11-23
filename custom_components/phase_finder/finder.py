@@ -29,15 +29,19 @@ from .const import (
     CONF_METERS,
     CONF_MIN_STEP_W,
     CONF_NAME,
+    CONF_VOLTAGE,
     CONF_WINDOW_S,
+    CURRENT_UNITS,
     DEFAULT_HALF_LIFE_DAYS,
     DEFAULT_INTERVAL_DAYS,
     DEFAULT_MIN_STEP_W,
+    DEFAULT_VOLTAGE,
     DEFAULT_WINDOW_S,
     DOMAIN,
     EVENT_PHASE_CHANGED,
     EXPORT_FIELDS,
     FIRST_RUN_DELAY_S,
+    MAX_BACKFILL_DAYS,
     PHASE_FIELDS,
     POWER_UNITS,
     PRE_S,
@@ -174,10 +178,21 @@ class PhaseFinder:
             window_s=float(self.options.get(CONF_WINDOW_S, DEFAULT_WINDOW_S)),
         )
 
-    def _scale(self, entity_id: str) -> float:
+    def _unit(self, entity_id: str) -> str | None:
         state = self.hass.states.get(entity_id)
         unit = state.attributes.get("unit_of_measurement") if state else None
-        return POWER_UNITS.get(unit, 1.0)
+        if unit is None:  # not reported yet (just after a restart): ask the registry
+            entry = er.async_get(self.hass).async_get(entity_id)
+            unit = entry.unit_of_measurement if entry else None
+        return unit
+
+    def _term(self, entity_id: str, sign: float) -> tuple[an.Term, bool]:
+        """A meter term in watts, and whether it is a current (which has no sign)."""
+        unit = self._unit(entity_id)
+        if unit in CURRENT_UNITS:
+            volts = float(self.options.get(CONF_VOLTAGE, DEFAULT_VOLTAGE))
+            return an.Term(entity_id, CURRENT_UNITS[unit] * volts, sign), True
+        return an.Term(entity_id, POWER_UNITS.get(unit or "", 1.0), sign), False
 
     def meters(self) -> list[an.Meter]:
         """The configured meters, reference first. A meter's name is its L1 entity id."""
@@ -185,12 +200,17 @@ class PhaseFinder:
         for option in self.meter_options:
             sign = -1.0 if option.get(CONF_INVERT) else 1.0
             phases: dict[str, list[an.Term]] = {}
+            unsigned = False
             for phase, imp, exp in zip(an.PHASES, PHASE_FIELDS, EXPORT_FIELDS, strict=True):
-                terms = [an.Term(option[imp], self._scale(option[imp]), sign)]
+                term, is_current = self._term(option[imp], sign)
+                terms = [term]
+                unsigned |= is_current
                 if option.get(exp):
-                    terms.append(an.Term(option[exp], self._scale(option[exp]), -sign))
+                    term, is_current = self._term(option[exp], -sign)
+                    terms.append(term)
+                    unsigned |= is_current
                 phases[phase] = terms
-            meters.append(an.Meter(option["l1"], phases))
+            meters.append(an.Meter(option["l1"], phases, unsigned=unsigned))
         return meters
 
     def meter_label(self, name: str) -> str:
@@ -332,7 +352,7 @@ class PhaseFinder:
         params = self.params()
         recorder = get_instance(self.hass)
         now = time.time()
-        oldest = now - recorder.keep_days * DAY_S + 3600.0
+        oldest = now - min(recorder.keep_days, MAX_BACKFILL_DAYS) * DAY_S + 3600.0
         start = max(self.analysed_until or oldest, oldest)
         end = now - params.window_s - 60.0
         active = {key: self.loads[key] for key in self.active_keys() if key in self.loads}

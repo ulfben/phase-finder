@@ -26,17 +26,19 @@ from .const import (
     CONF_METERS,
     CONF_MIN_STEP_W,
     CONF_NAME,
+    CONF_VOLTAGE,
     CONF_WINDOW_S,
     DEFAULT_HALF_LIFE_DAYS,
     DEFAULT_INTERVAL_DAYS,
     DEFAULT_MIN_STEP_W,
+    DEFAULT_VOLTAGE,
     DEFAULT_WINDOW_S,
     DOMAIN,
     EXPORT_FIELDS,
     PHASE_FIELDS,
     TITLE,
 )
-from .discovery import find_loads, power_sensors, suggest_meters
+from .discovery import current_sensors, find_loads, power_sensors, suggest_meters
 
 MANUAL = "manual"
 CONF_REFERENCE = "reference"
@@ -48,6 +50,18 @@ CONF_ADD_ANOTHER = "add_another"
 def _power_selector(multiple: bool = False) -> selector.EntitySelector:
     return selector.EntitySelector(
         selector.EntitySelectorConfig(domain="sensor", device_class="power", multiple=multiple)
+    )
+
+
+def _meter_selector() -> selector.EntitySelector:
+    """Power sensors, or current sensors for meters that report only current per phase."""
+    return selector.EntitySelector(
+        selector.EntitySelectorConfig(
+            filter=[
+                selector.EntityFilterSelectorConfig(domain="sensor", device_class="power"),
+                selector.EntityFilterSelectorConfig(domain="sensor", device_class="current"),
+            ]
+        )
     )
 
 
@@ -69,9 +83,9 @@ def _meter_schema(defaults: dict[str, Any] | None, ask_another: bool) -> vol.Sch
         vol.Required(CONF_NAME, default=d.get(CONF_NAME, "")): selector.TextSelector(),
     }
     for key in PHASE_FIELDS:
-        fields[vol.Required(key, description={"suggested_value": d.get(key)})] = _power_selector()
+        fields[vol.Required(key, description={"suggested_value": d.get(key)})] = _meter_selector()
     for key in EXPORT_FIELDS:
-        fields[vol.Optional(key, description={"suggested_value": d.get(key)})] = _power_selector()
+        fields[vol.Optional(key, description={"suggested_value": d.get(key)})] = _meter_selector()
     fields[vol.Required(CONF_INVERT, default=bool(d.get(CONF_INVERT, False)))] = (
         selector.BooleanSelector()
     )
@@ -159,7 +173,10 @@ class _MeterSteps:
         return [m for m in self._suggested if m["l1"] not in taken]
 
     async def async_step_reference(self, user_input: dict[str, Any] | None = None):
-        self._suggested = suggest_meters(power_sensors(self.hass), _names(self.hass))
+        currents = current_sensors(self.hass)
+        self._suggested = suggest_meters(
+            [*power_sensors(self.hass), *currents], _names(self.hass), currents
+        )
         if user_input is not None:
             choice = user_input[CONF_REFERENCE]
             if choice == MANUAL:
@@ -334,6 +351,9 @@ class PhaseFinderOptionsFlow(_MeterSteps, OptionsFlow):
                 vol.Required(
                     CONF_WINDOW_S, default=options.get(CONF_WINDOW_S, DEFAULT_WINDOW_S)
                 ): _number(4, 60, 1, "s"),
+                vol.Required(
+                    CONF_VOLTAGE, default=options.get(CONF_VOLTAGE, DEFAULT_VOLTAGE)
+                ): _number(100, 260, 1, "V"),
             }
         )
         return self.async_show_form(step_id="settings", data_schema=schema)

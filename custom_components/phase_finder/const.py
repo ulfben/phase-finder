@@ -24,11 +24,15 @@ CONF_INTERVAL_DAYS: Final = "interval_days"
 CONF_HALF_LIFE_DAYS: Final = "half_life_days"
 CONF_MIN_STEP_W: Final = "min_step_w"
 CONF_WINDOW_S: Final = "window_s"
+CONF_VOLTAGE: Final = "voltage"  # nominal phase voltage, for meters that report current
 
 DEFAULT_INTERVAL_DAYS: Final = 7
 DEFAULT_HALF_LIFE_DAYS: Final = 60
 DEFAULT_MIN_STEP_W: Final = 40
 DEFAULT_WINDOW_S: Final = 12
+DEFAULT_VOLTAGE: Final = 230
+# The first analysis reads at most this much history, however long the recorder keeps it.
+MAX_BACKFILL_DAYS: Final = 30
 
 # When the scheduled analysis runs (local time).
 RUN_HOUR: Final = 3
@@ -72,3 +76,4 @@ DERIVED_PLATFORMS: Final = frozenset(
 # A device with more power sensors than this is a meter or an inverter, not a load.
 MAX_POWER_SENSORS_PER_DEVICE: Final = 4
 POWER_UNITS: Final = {"W": 1.0, "kW": 1000.0, "MW": 1_000_000.0}
+CURRENT_UNITS: Final = {"A": 1.0, "mA": 0.001}

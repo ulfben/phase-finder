@@ -16,6 +16,7 @@ from .const import (
     CONF_EXCLUDE,
     CONF_INCLUDE,
     CONF_NAME,
+    CURRENT_UNITS,
     DERIVED_PLATFORMS,
     EXPORT_FIELDS,
     MAX_POWER_SENSORS_PER_DEVICE,
@@ -55,12 +56,15 @@ class _Group:
 
 
 def suggest_meters(
-    entity_ids: Iterable[str], names: Mapping[str, str] | None = None
+    entity_ids: Iterable[str],
+    names: Mapping[str, str] | None = None,
+    currents: Iterable[str] = (),
 ) -> list[dict[str, Any]]:
     """Meters whose sensors differ only in the phase, with an export side when there is one.
 
-    Returns meter option dicts ({name, l1, l2, l3[, l1_export, ...]}), numbered (L1/L2/L3)
-    meters first, since lettered ones (A/B/C) often use another order than the house.
+    Returns meter option dicts ({name, l1, l2, l3[, l1_export, ...]}): power meters before
+    current meters (those in `currents`), and numbered (L1/L2/L3) before lettered (A/B/C)
+    ones, since lettered ones often use another order than the house.
     """
     groups: dict[str, _Group] = {}
     for entity_id in entity_ids:
@@ -79,7 +83,8 @@ def suggest_meters(
         return tuple(t for t in group.key.split("_") if t not in _EXPORT_WORDS | _IMPORT_WORDS)
 
     exports = {base(g): g for g in complete.values() if g.words & _EXPORT_WORDS}
-    meters: list[tuple[bool, str, dict[str, Any]]] = []
+    current_ids = set(currents)
+    meters: list[tuple[bool, bool, str, dict[str, Any]]] = []
     for group in complete.values():
         if group.words & _EXPORT_WORDS:
             continue
@@ -95,8 +100,8 @@ def suggest_meters(
         label = (names or {}).get(first) or group.key.replace("_*", "").replace("_", " ")
         meter[CONF_NAME] = label
         lettered = "_phase_a" in first or "_phase_b" in first
-        meters.append((lettered, label.lower(), meter))
-    return [m for _, _, m in sorted(meters, key=lambda m: (m[0], m[1]))]
+        meters.append((first in current_ids, lettered, label.lower(), meter))
+    return [m[3] for m in sorted(meters, key=lambda m: m[:3])]
 
 
 def _registry_power(entry: er.RegistryEntry) -> bool:
@@ -105,6 +110,24 @@ def _registry_power(entry: er.RegistryEntry) -> bool:
         and (entry.device_class or entry.original_device_class) == "power"
         and entry.unit_of_measurement in POWER_UNITS
     )
+
+
+def current_sensors(hass: HomeAssistant) -> list[str]:
+    """Every sensor that reports a current in A or mA (for meters without power per phase)."""
+    found = {
+        state.entity_id
+        for state in hass.states.async_all("sensor")
+        if state.attributes.get("device_class") == "current"
+        and state.attributes.get("unit_of_measurement") in CURRENT_UNITS
+    }
+    found |= {
+        e.entity_id
+        for e in er.async_get(hass).entities.values()
+        if e.domain == "sensor"
+        and (e.device_class or e.original_device_class) == "current"
+        and e.unit_of_measurement in CURRENT_UNITS
+    }
+    return sorted(found)
 
 
 def power_sensors(hass: HomeAssistant) -> list[str]:

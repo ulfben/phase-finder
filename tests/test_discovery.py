@@ -26,3 +26,10 @@ def test_suggests_p1_with_export_first_then_lettered() -> None:
 
 def test_incomplete_meter_is_not_suggested() -> None:
     assert suggest_meters(["sensor.power_l1", "sensor.power_l2"]) == []
+
+
+def test_current_meters_come_after_power_meters() -> None:
+    amps = [f"sensor.current_l{i}_house" for i in (1, 2, 3)]
+    watts = [f"sensor.power_l{i}_house" for i in (1, 2, 3)]
+    meters = suggest_meters([*amps, *watts], currents=amps)
+    assert [m["l1"] for m in meters] == [watts[0], amps[0]]

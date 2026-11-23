@@ -76,7 +76,7 @@ class Term:
     """One sensor's contribution to a phase reading, in watts after scale and sign."""
 
     source: str
-    scale: float = 1.0  # to watts, e.g. 1000 for kW
+    scale: float = 1.0  # to watts: 1000 for kW, or the nominal voltage for a current in A
     sign: float = 1.0  # -1 for an export sensor that is subtracted
 
 
@@ -86,6 +86,9 @@ class Meter:
 
     name: str
     phases: Mapping[str, Sequence[Term]]
+    # The readings have no sign (a current: importing and exporting 3 A look the same), so a
+    # step may show as +delta or -delta on its phase. Such a meter votes for single phases only.
+    unsigned: bool = False
 
     def sources(self) -> set[str]:
         return {term.source for terms in self.phases.values() for term in terms}
@@ -211,7 +214,9 @@ def phase_deltas(
     return deltas
 
 
-def classify(delta: float, deltas: Mapping[str, float], params: Params) -> str | None:
+def classify(
+    delta: float, deltas: Mapping[str, float], params: Params, unsigned: bool = False
+) -> str | None:
     """The phase (or phases) that explain a step, or None if it is not clear.
 
     A single phase wins when its change matches the step and no other candidate comes close.
@@ -221,11 +226,16 @@ def classify(delta: float, deltas: Mapping[str, float], params: Params) -> str |
     size = abs(delta)
     match = params.match_ratio * size
     reject = params.reject_ratio * size
-    single = {p: abs(deltas[p] - delta) for p in PHASES}
+    if unsigned:
+        single = {p: min(abs(deltas[p] - delta), abs(deltas[p] + delta)) for p in PHASES}
+    else:
+        single = {p: abs(deltas[p] - delta) for p in PHASES}
     ranked = sorted(PHASES, key=single.__getitem__)
     if single[ranked[0]] < match:
         # One phase fits. It counts only if the runner-up is clearly worse.
         return ranked[0] if single[ranked[1]] > reject else None
+    if unsigned:
+        return None  # a split over phases can't be told without the sign
     # No single phase explains the step: try a split over two or three phases. Each phase in
     # the split must carry a real part of it, and the phases outside it must stay still.
     split: dict[str, float] = {}
@@ -295,7 +305,7 @@ def analyse_load(
             if deltas is None:
                 continue
             fresh.add(meter.name)
-            keys[meter.name] = classify(step.delta, deltas, params)
+            keys[meter.name] = classify(step.delta, deltas, params, meter.unsigned)
         if not fresh:
             continue
         result.tested += 1

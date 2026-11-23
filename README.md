@@ -39,7 +39,8 @@ Loads that never switch (a network rack, a camera) have no steps, so their phase
 ## Requirements
 
 - Home Assistant 2025.1 or newer, with the recorder enabled (it is by default).
-- A 3-phase connection and a meter that reports **power per phase** on the main fuse.
+- A 3-phase connection and a meter on the main fuse that reports **power per phase** (best)
+  or **current per phase** (a Tibber Pulse, many HAN/P1 readers): see [Current meters](#current-meters).
 - Power sensors (W or kW) on the loads you want to place: smart plugs, Shelly relays with power
   metering, sub-meter channels...
 
@@ -65,7 +66,8 @@ Then go to **Settings → Devices & services → Add integration → Phase Finde
    (it skips meters, inverters, template and statistics sensors, totals and forecasts), including
    ones added later. You can add and exclude sensors.
 
-The first analysis runs two minutes after setup, over all the history the recorder keeps. After
+The first analysis runs two minutes after setup, over the history the recorder keeps (at most
+the last 30 days). After
 that it runs weekly at 03:17 (the interval is in the options).
 
 ## Entities
@@ -124,6 +126,19 @@ report more often.
 
 `tools/replay_sqlite.py` runs the analysis on a copy of (or read-only on) a recorder SQLite
 database outside Home Assistant, for experimenting with the parameters.
+
+## Current meters
+
+A meter that reports only current per phase works too. Phase Finder multiplies the current by a
+nominal voltage (230 V, in the options) to get watts. Current has no direction: importing and
+exporting 3 A look the same. So a step counts for a phase when the phase moved by about the same
+amount up *or* down, which also covers a phase that is exporting solar power. Such a meter can't
+tell a load split over two phases, so it only votes for single phases.
+
+On the house this was developed in, a Tibber Pulse (current only, a reading every 30–40 s) placed
+11 of 16 known loads correctly and none wrongly, with half the votes a power meter gave. Use a
+power meter as the reference when you have one, and add the current meter as an extra meter if
+it reports more often.
 
 ## Limitations
 

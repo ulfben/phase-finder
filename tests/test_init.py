@@ -17,11 +17,17 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
 from custom_components.phase_finder.const import DOMAIN
 
 W = {"device_class": "power", "unit_of_measurement": "W", "state_class": "measurement"}
+A = {"device_class": "current", "unit_of_measurement": "A", "state_class": "measurement"}
 METER = {"name": "Meter", "l1": "sensor.grid_l1", "l2": "sensor.grid_l2", "l3": "sensor.grid_l3"}
 
 
-async def _record_history(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
-    """Every 5 s a meter reading; the plug on L2 switches 600 W on and off."""
+async def _record_history(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, amps: bool = False
+) -> None:
+    """Every 5 s a meter reading; the plug on L2 switches 600 W on and off.
+
+    With amps the meter reports current (W / 230) instead of power.
+    """
     freezer.move_to(dt_util.utcnow() - timedelta(hours=3))
     plug_on = False
     for tick in range(1200):
@@ -31,7 +37,10 @@ async def _record_history(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -
         jitter = tick % 7
         base = {"l1": 900, "l2": 500 + (600 if plug_on else 0), "l3": 300}
         for phase, value in base.items():
-            hass.states.async_set(f"sensor.grid_{phase}", str(value + jitter), W)
+            if amps:
+                hass.states.async_set(f"sensor.grid_{phase}", f"{(value + jitter) / 230:.2f}", A)
+            else:
+                hass.states.async_set(f"sensor.grid_{phase}", str(value + jitter), W)
         freezer.tick(timedelta(seconds=5))
         if tick % 100 == 0:
             await hass.async_block_till_done()
@@ -88,3 +97,20 @@ async def test_finds_the_phase(hass: HomeAssistant, freezer: FrozenDateTimeFacto
     )
     await hass.async_block_till_done()
     assert hass.states.get("sensor.dishwasher_power_phase").state == "unknown"
+
+
+async def test_current_meter(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
+    """A meter that reports only current per phase still finds the phase."""
+    hass.states.async_set("sensor.dishwasher_power", "0", W)
+    await _record_history(hass, freezer, amps=True)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={"meters": [METER], "auto": False, "include": ["sensor.dishwasher_power"]},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.runtime_data.meters()[0].unsigned
+    await entry.runtime_data.async_run()
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.dishwasher_power_phase").state == "L2"
